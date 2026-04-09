@@ -60,9 +60,10 @@ async def _openai(
         stream=stream, **kwargs
     )
 
+    if stream:
+        return _openai_stream(f"{base}/chat/completions", headers, payload)
+
     async with httpx.AsyncClient(timeout=120) as client:
-        if stream:
-            return _openai_stream(client, f"{base}/chat/completions", headers, payload)
         r = await client.post(f"{base}/chat/completions", json=payload, headers=headers)
         r.raise_for_status()
         raw = r.json()
@@ -74,18 +75,19 @@ async def _openai(
         )
 
 
-async def _openai_stream(client, url, headers, payload) -> AsyncIterator[str]:
-    async with client.stream("POST", url, json=payload, headers=headers) as r:
-        r.raise_for_status()
-        async for line in r.aiter_lines():
-            if line.startswith("data: ") and line != "data: [DONE]":
-                try:
-                    chunk = json.loads(line[6:])
-                    delta = chunk["choices"][0]["delta"].get("content", "")
-                    if delta:
-                        yield delta
-                except (json.JSONDecodeError, KeyError, IndexError):
-                    continue
+async def _openai_stream(url, headers, payload) -> AsyncIterator[str]:
+    async with httpx.AsyncClient(timeout=120) as client:
+        async with client.stream("POST", url, json=payload, headers=headers) as r:
+            r.raise_for_status()
+            async for line in r.aiter_lines():
+                if line.startswith("data: ") and line != "data: [DONE]":
+                    try:
+                        chunk = json.loads(line[6:])
+                        delta = chunk["choices"][0]["delta"].get("content", "")
+                        if delta:
+                            yield delta
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        continue
 
 
 # ---------------------------------------------------------------------------

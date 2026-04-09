@@ -1,7 +1,23 @@
+# Python
 __pycache__/
 *.pyc
 .pytest_cache/
-*.db
 
-# Environment variables
+# Data
+*.db
+*.sqlite
+
+# Environment variables (contains sensitive API keys)
 .env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Logs
+*.log

@@ -87,8 +87,16 @@ def load(path: str | Path) -> RelayConfig:
         ))
 
     gs = raw.get("general_settings", {})
+
+    # Use RELAY_KEY or RELAY_BEARER_TOKEN environment variable if set, otherwise fall back to config
+    master_key = (
+        os.environ.get("RELAY_KEY") or
+        os.environ.get("RELAY_BEARER_TOKEN") or
+        gs.get("master_key")
+    )
+
     return RelayConfig(
         models=models,
-        master_key=gs.get("master_key"),
+        master_key=master_key,
         request_timeout=int(gs.get("request_timeout", 120)),
     )
