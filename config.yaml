@@ -1,0 +1,80 @@
+# relay config.yaml — drop-in replacement for litellm config.yaml
+#
+# Start with:
+#   relay --config config.yaml --port 4000
+#
+# Then call it exactly like LiteLLM or the OpenAI API:
+#   curl http://localhost:4000/v1/chat/completions \
+#     -H "Content-Type: application/json" \
+#     -H "Authorization: Bearer sk-relay-secret" \
+#     -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hi"}]}'
+
+model_list:
+  # ── OpenAI ────────────────────────────────────────────────────────────────
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY    # reads from env var
+
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  # ── Anthropic ─────────────────────────────────────────────────────────────
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # ── Qwen (Alibaba DashScope) ──────────────────────────────────────────────
+  - model_name: qwen-turbo
+    litellm_params:
+      model: qwen/qwen-turbo
+      api_key: os.environ/DASHSCOPE_API_KEY
+
+  - model_name: qwen-max
+    litellm_params:
+      model: qwen/qwen-max
+      api_key: os.environ/DASHSCOPE_API_KEY
+
+  # ── GLM (Zhipu AI) ────────────────────────────────────────────────────────
+  - model_name: glm-4
+    litellm_params:
+      model: glm/glm-4
+      api_key: os.environ/ZHIPU_API_KEY
+
+  - model_name: glm-4-flash
+    litellm_params:
+      model: glm/glm-4-flash
+      api_key: os.environ/ZHIPU_API_KEY
+
+  # ── Kimi (Moonshot) ───────────────────────────────────────────────────────
+  - model_name: kimi-8k
+    litellm_params:
+      model: kimi/moonshot-v1-8k
+      api_key: os.environ/MOONSHOT_API_KEY
+
+  # ── DeepSeek ──────────────────────────────────────────────────────────────
+  - model_name: deepseek-chat
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: os.environ/DEEPSEEK_API_KEY
+
+  # ── Self-hosted via Ollama (no key needed) ────────────────────────────────
+  - model_name: llama3
+    litellm_params:
+      model: ollama/llama3.2
+
+  - model_name: qwen-local
+    litellm_params:
+      model: ollama/qwen2.5:7b
+
+  # ── Self-hosted via vLLM ──────────────────────────────────────────────────
+  - model_name: qwen-72b
+    litellm_params:
+      model: vllm/Qwen2.5-72B-Instruct
+
+general_settings:
+  master_key: sk-relay-secret-change-me   # set to null to disable auth
+  request_timeout: 120

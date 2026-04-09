@@ -284,3 +284,110 @@ resp = await unillm.completion("spark/spark-max", messages)
 ## License
 
 MIT
+
+---
+
+## Running as a Proxy Server (LiteLLM-compatible)
+
+Relay can be started as a drop-in replacement for the LiteLLM proxy:
+
+```bash
+pip install relay-llm
+relay --config config.yaml --port 4000
+```
+
+```
+  ██████  ███████ ██      █████  ██    ██
+  ██   ██ ██      ██     ██   ██  ██  ██
+  ██████  █████   ██     ███████   ████
+  ██   ██ ██      ██     ██   ██    ██
+  ██   ██ ███████ ██████ ██   ██    ██
+
+  Relay LLM Proxy  — supply-chain-safe LiteLLM drop-in
+
+  Config      : /your/path/config.yaml
+  Models      : gpt-4o, qwen-turbo, glm-4, llama3, ...
+  Auth        : master_key set ✓
+  Listening   : http://0.0.0.0:4000
+
+  Endpoints:
+    GET  /health
+    GET  /v1/models
+    POST /v1/chat/completions
+    GET  /v1/usage
+```
+
+### config.yaml format (identical to LiteLLM)
+
+```yaml
+model_list:
+  - model_name: gpt-4o                    # alias callers use
+    litellm_params:
+      model: openai/gpt-4o                # relay provider/model
+      api_key: os.environ/OPENAI_API_KEY  # or inline: "sk-..."
+
+  - model_name: qwen-turbo
+    litellm_params:
+      model: qwen/qwen-turbo
+      api_key: os.environ/DASHSCOPE_API_KEY
+
+  - model_name: glm-4
+    litellm_params:
+      model: glm/glm-4
+      api_key: os.environ/ZHIPU_API_KEY
+
+  - model_name: local-llama               # self-hosted, no key needed
+    litellm_params:
+      model: ollama/llama3.2
+
+general_settings:
+  master_key: sk-relay-secret             # set null to disable auth
+  request_timeout: 120
+```
+
+### Call it exactly like OpenAI
+
+```bash
+# List models
+curl http://localhost:4000/v1/models
+
+# Chat completion
+curl http://localhost:4000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-relay-secret" \
+  -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hello!"}]}'
+
+# Use model alias OR provider/model string directly
+curl http://localhost:4000/v1/chat/completions \
+  -d '{"model": "deepseek/deepseek-chat", "messages": [...]}'
+
+# Check live usage + cost
+curl http://localhost:4000/v1/usage
+```
+
+### Use with the OpenAI SDK
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:4000/v1",
+    api_key="sk-relay-secret",     # your master_key
+)
+
+resp = client.chat.completions.create(
+    model="qwen-turbo",            # model_name from config.yaml
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(resp.choices[0].message.content)
+```
+
+### CLI Options
+
+```
+relay --config config.yaml --port 4000
+relay --config config.yaml --port 4000 --host 0.0.0.0
+relay --config config.yaml --port 4000 --workers 4
+relay --config config.yaml --port 4000 --log-level warning
+relay --version
+```
