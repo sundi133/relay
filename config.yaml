@@ -75,6 +75,35 @@ model_list:
     litellm_params:
       model: vllm/Qwen2.5-72B-Instruct
 
+# ── GUARDRAILS CONFIGURATION ──────────────────────────────────────────────
+# Uncomment and configure to enable guardrails
+# Same format as LiteLLM for easy migration
+
+# guardrails:
+#   - guardrail_name: "votal-input-guard"
+#     litellm_params:
+#       guardrail: unillm.votal_guardrail_relay.VotalGuardrail
+#       mode: "pre_call"
+#       default_on: true
+#
+#   - guardrail_name: "votal-output-guard"
+#     litellm_params:
+#       guardrail: unillm.votal_guardrail_relay.VotalGuardrail
+#       mode: "post_call"
+#       default_on: true
+
+# Votal guardrail configuration (used if Votal guardrails are enabled)
+# votal_guardrail:
+#   api_base: "https://kk5losqxwr2ui7.api.runpod.ai"
+#   api_token: "os.environ/RUNPOD_TOKEN"
+#   default_tenant_api_key: "basic-api-key-12345"
+#   default_user_role: "user"
+#   timeout: 30
+#   block_on_failure: true
+#   conditional_activation: true
+#   required_headers: ["X-Tenant-ID", "X-Votal-Key", "X-Shield-Key"]
+#   pass_through_on_missing: true
+
 general_settings:
   master_key: sk-relay-secret-change-me   # set to null to disable auth
   request_timeout: 120
