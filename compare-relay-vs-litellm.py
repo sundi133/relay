@@ -260,7 +260,7 @@ async def main():
     # Server configurations - IDENTICAL MODEL NAMES for fair comparison
     relay_config = ServerConfig(
         name="Relay (Optimized)",
-        url="http://localhost:4000",
+        url="http://localhost:4001",
         endpoint="/v1/chat/completions",
         model="gpt-4.1-mini",  # Same model name for both servers
         auth="Bearer sk-relay-secret-change-me"
@@ -268,7 +268,7 @@ async def main():
 
     litellm_config = ServerConfig(
         name="LiteLLM (Original)",
-        url="http://localhost:4001",
+        url="http://localhost:4000",
         endpoint="/chat/completions",  # No /v1/ prefix for LiteLLM
         model="gpt-4.1-mini",  # Same model name for both servers
         auth="Bearer sk-relay-secret-change-me"
@@ -282,14 +282,14 @@ async def main():
     # Check server availability
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            relay_health = await client.get("http://localhost:4000/health")
-            litellm_health = await client.get("http://localhost:4001/health")
+            relay_health = await client.get("http://localhost:4001/health")
+            litellm_health = await client.get("http://localhost:4000/health")
 
         if relay_health.status_code != 200:
-            print("❌ Relay server not available on port 4000")
+            print("❌ Relay server not available on port 4001")
             return
         if litellm_health.status_code != 200:
-            print("❌ LiteLLM server not available on port 4001")
+            print("❌ LiteLLM server not available on port 4000")
             return
 
         print("✅ Both servers are ready for testing!")
