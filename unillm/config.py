@@ -25,9 +25,18 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 import yaml
+
+
+@dataclass
+class GuardrailEntry:
+    guardrail_name: str
+    guardrail_class: str     # e.g. "unillm.votal_guardrail_relay.VotalGuardrail"
+    mode: str                # "pre_call", "post_call", or "both"
+    enabled: bool = True
+    config: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -35,6 +44,7 @@ class ModelEntry:
     model_name: str          # alias exposed in the API  (e.g. "gpt-4o")
     model: str               # relay provider/model      (e.g. "openai/gpt-4o")
     api_key: Optional[str] = None
+    guardrails: Optional[List[str]] = None  # List of guardrail names to apply
 
 
 @dataclass
@@ -42,6 +52,8 @@ class RelayConfig:
     models: list[ModelEntry] = field(default_factory=list)
     master_key: Optional[str] = None
     request_timeout: int = 120
+    guardrails: list[GuardrailEntry] = field(default_factory=list)
+    guardrails_config: Dict[str, Any] = field(default_factory=dict)
 
     def model_for(self, name: str) -> Optional[ModelEntry]:
         """Look up a ModelEntry by its public alias."""
@@ -50,9 +62,20 @@ class RelayConfig:
                 return m
         return None
 
+    def guardrail_for(self, name: str) -> Optional[GuardrailEntry]:
+        """Look up a GuardrailEntry by its name."""
+        for g in self.guardrails:
+            if g.guardrail_name == name:
+                return g
+        return None
+
     @property
     def model_names(self) -> list[str]:
         return [m.model_name for m in self.models]
+
+    @property
+    def guardrail_names(self) -> list[str]:
+        return [g.guardrail_name for g in self.guardrails]
 
 
 def load(path: str | Path) -> RelayConfig:
@@ -80,11 +103,51 @@ def load(path: str | Path) -> RelayConfig:
             env_var = api_key.split("/", 1)[1]
             api_key = os.environ.get(env_var)
 
+        # Parse guardrails for this model (optional)
+        model_guardrails = entry.get("guardrails")
+        if isinstance(model_guardrails, str):
+            model_guardrails = [model_guardrails]
+
         models.append(ModelEntry(
             model_name=entry["model_name"],
             model=model_str,
             api_key=api_key,
+            guardrails=model_guardrails,
         ))
+
+    # Parse guardrails configuration
+    guardrails: list[GuardrailEntry] = []
+    guardrails_section = raw.get("guardrails", [])
+
+    for guardrail_entry in guardrails_section:
+        guardrail_name = guardrail_entry.get("guardrail_name")
+        if not guardrail_name:
+            continue
+
+        params = guardrail_entry.get("litellm_params", {})  # Keep litellm_params for compatibility
+
+        # Extract guardrail configuration
+        guardrail_class = params.get("guardrail", "")
+        mode = params.get("mode", "both")
+        enabled = params.get("default_on", True)
+
+        # Get additional config from the params
+        config = {k: v for k, v in params.items()
+                 if k not in ["guardrail", "mode", "default_on"]}
+
+        guardrails.append(GuardrailEntry(
+            guardrail_name=guardrail_name,
+            guardrail_class=guardrail_class,
+            mode=mode,
+            enabled=enabled,
+            config=config,
+        ))
+
+    # Parse guardrails global configuration (e.g., votal_guardrail section)
+    guardrails_config = {}
+    for key, value in raw.items():
+        if key.endswith("_guardrail") or key == "votal_guardrail":
+            guardrails_config[key] = value
 
     gs = raw.get("general_settings", {})
 
@@ -99,4 +162,6 @@ def load(path: str | Path) -> RelayConfig:
         models=models,
         master_key=master_key,
         request_timeout=int(gs.get("request_timeout", 120)),
+        guardrails=guardrails,
+        guardrails_config=guardrails_config,
     )

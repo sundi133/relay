@@ -1,0 +1,70 @@
+# relay config.yaml with Votal AI Guardrails enabled
+#
+# This example shows how to enable the same Votal guardrails you use in LiteLLM
+#
+# To use:
+#   1. Copy your votal_guardrail.py to unillm/ (already done)
+#   2. Set RUNPOD_TOKEN in your .env file
+#   3. Start relay: ./start_relay.sh
+
+model_list:
+  # ── OpenAI with guardrails ────────────────────────────────────────────────
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+    # Apply guardrails to this model
+    guardrails: ["votal-input-guard", "votal-output-guard"]
+
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+    # Apply guardrails to this model too
+    guardrails: ["votal-input-guard", "votal-output-guard"]
+
+  # ── Anthropic with guardrails ─────────────────────────────────────────────
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-20250514
+      api_key: os.environ/ANTHROPIC_API_KEY
+    guardrails: ["votal-input-guard", "votal-output-guard"]
+
+  # ── Local model without guardrails ────────────────────────────────────────
+  - model_name: llama3
+    litellm_params:
+      model: ollama/llama3.2
+    # No guardrails for local testing
+
+# ── GUARDRAILS CONFIGURATION ──────────────────────────────────────────────
+# Same format as your LiteLLM config!
+
+guardrails:
+  - guardrail_name: "votal-input-guard"
+    litellm_params:
+      guardrail: unillm.votal_guardrail_relay.VotalGuardrail
+      mode: "pre_call"
+      default_on: true
+
+  - guardrail_name: "votal-output-guard"
+    litellm_params:
+      guardrail: unillm.votal_guardrail_relay.VotalGuardrail
+      mode: "post_call"
+      default_on: true
+
+# Votal guardrail configuration (same as LiteLLM)
+votal_guardrail:
+  api_base: "https://kk5losqxwr2ui7.api.runpod.ai"
+  default_tenant_api_key: "basic-api-key-12345"
+  default_user_role: "user"
+  timeout: 30
+  block_on_failure: true
+
+  # Conditional guardrail activation (optional)
+  conditional_activation: true
+  required_headers: ["X-Tenant-ID", "X-Votal-Key", "X-Shield-Key"]
+  pass_through_on_missing: true
+
+general_settings:
+  master_key: sk-relay-secret-change-me
+  request_timeout: 120

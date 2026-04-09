@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import time
 import uuid
+import json
 from typing import AsyncIterator, Optional
 
 from fastapi import FastAPI, HTTPException, Request, Depends
@@ -28,6 +29,8 @@ from .handlers import call
 from .retry import with_retry
 from .tracker import tracker as global_tracker
 from . import providers as _providers
+from .guardrails_manager import RelayGuardrailManager
+from .guardrails_base import GuardrailContext
 
 
 # ---------------------------------------------------------------------------
@@ -53,9 +56,22 @@ class ChatCompletionRequest(BaseModel):
 def create_app(config: RelayConfig) -> FastAPI:
     app = FastAPI(
         title="Relay LLM Proxy",
-        description="OpenAI-compatible LLM gateway",
+        description="OpenAI-compatible LLM gateway with guardrails",
         version="0.1.0",
     )
+
+    # Initialize guardrails manager
+    guardrails_manager = RelayGuardrailManager(config)
+    app.state.guardrails_manager = guardrails_manager
+
+    # Initialize guardrails on startup
+    @app.on_event("startup")
+    async def startup_event():
+        await guardrails_manager.initialize()
+
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        await guardrails_manager.shutdown()
 
     # ── Auth middleware ──────────────────────────────────────────────────────
     @app.middleware("http")
@@ -125,24 +141,103 @@ def create_app(config: RelayConfig) -> FastAPI:
         return {"object": "list", "data": data}
 
     @app.post("/v1/chat/completions")
-    async def chat_completions(req: ChatCompletionRequest):
+    async def chat_completions(req: ChatCompletionRequest, request: Request):
         provider, model_id, _ = resolve(req.model)
         messages = [m.model_dump() for m in req.messages]
         t0 = time.monotonic()
 
+        # Create guardrail context
+        context = GuardrailContext(
+            headers=dict(request.headers),
+            model=req.model,
+            messages=messages,
+            metadata={}
+        )
+
+        # Input validation with guardrails
+        guardrails_manager = app.state.guardrails_manager
+        input_result = await guardrails_manager.validate_for_model(
+            model_name=req.model,
+            context=context,
+            messages=messages,
+            mode="input"
+        )
+
+        if not input_result.get("allowed", True):
+            # Format response to match LiteLLM exactly
+            metadata = input_result.get("metadata", {})
+            blocked_guardrails = metadata.get("blocked_guardrails", [])
+
+            # Create LiteLLM-compatible error message
+            if blocked_guardrails:
+                # Format like LiteLLM: include full guardrail details
+                error_info = {
+                    "info": "Request blocked by Votal guardrails",
+                    "blocked_guardrails": blocked_guardrails,
+                    "total_blocked": len(blocked_guardrails),
+                    "inference_time_ms": metadata.get("inference_time_ms", 0)
+                }
+                error_message = str(error_info)  # Convert to string like LiteLLM
+            else:
+                error_message = input_result.get("reason", "Request blocked by guardrails")
+
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": {
+                        "message": error_message,
+                        "type": "None",
+                        "param": "None",
+                        "code": "400"
+                    }
+                }
+            )
+
+        # Use modified messages if available
+        validated_messages = input_result.get("messages", messages)
+
         async def _call():
             return await call(
-                provider, model_id, messages,
+                provider, model_id, validated_messages,
                 stream=req.stream,
                 temperature=req.temperature,
                 max_tokens=req.max_tokens,
             )
 
         if req.stream:
-            async def _event_stream() -> AsyncIterator[bytes]:
+            async def _event_stream_with_guardrails() -> AsyncIterator[bytes]:
                 gen = await with_retry(_call, max_attempts=3)
                 request_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+                accumulated_content = ""
+
                 async for chunk in gen:
+                    accumulated_content += chunk
+
+                    # Validate streaming chunk
+                    chunk_result = await guardrails_manager.validate_for_model(
+                        model_name=req.model,
+                        context=context,
+                        response_content=accumulated_content,
+                        full_response={"choices": [{"message": {"content": accumulated_content}}]},
+                        mode="output"
+                    )
+
+                    if not chunk_result.get("allowed", True):
+                        # Stream was blocked - send error and stop
+                        error_data = {
+                            "id": request_id,
+                            "object": "chat.completion.chunk",
+                            "choices": [{
+                                "delta": {"content": f"[BLOCKED: {chunk_result.get('reason', 'Content blocked by guardrails')}]"},
+                                "index": 0,
+                                "finish_reason": "stop"
+                            }]
+                        }
+                        yield f"data: {json.dumps(error_data)}\n\n".encode()
+                        yield b"data: [DONE]\n\n"
+                        return
+
+                    # Continue streaming
                     data = (
                         '{"id":"' + request_id + '",'
                         '"object":"chat.completion.chunk",'
@@ -150,18 +245,18 @@ def create_app(config: RelayConfig) -> FastAPI:
                         '"index":0,"finish_reason":null}]}'
                     )
                     yield f"data: {data}\n\n".encode()
+
                 yield b"data: [DONE]\n\n"
 
-            return StreamingResponse(_event_stream(), media_type="text/event-stream")
+            return StreamingResponse(_event_stream_with_guardrails(), media_type="text/event-stream")
 
         # Non-streaming
         resp = await with_retry(_call, max_attempts=3)
         latency_ms = (time.monotonic() - t0) * 1000
-        global_tracker.record(f"{provider}/{model_id}", resp.get("usage", {}), latency_ms)
 
-        # Return in OpenAI wire format
+        # Output validation with guardrails
         request_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
-        return {
+        full_response = {
             "id": request_id,
             "object": "chat.completion",
             "created": int(time.time()),
@@ -176,6 +271,50 @@ def create_app(config: RelayConfig) -> FastAPI:
             "usage": resp.get("usage", {}),
             "relay": {"target": f"{provider}/{model_id}"},
         }
+
+        output_result = await guardrails_manager.validate_for_model(
+            model_name=req.model,
+            context=context,
+            response_content=resp["content"],
+            full_response=full_response,
+            mode="output"
+        )
+
+        if not output_result.get("allowed", True):
+            # Format response to match LiteLLM exactly
+            metadata = output_result.get("metadata", {})
+            blocked_guardrails = metadata.get("blocked_guardrails", [])
+
+            # Create LiteLLM-compatible error message
+            if blocked_guardrails:
+                error_info = {
+                    "info": "Output blocked by Votal guardrails",
+                    "blocked_guardrails": blocked_guardrails,
+                    "total_blocked": len(blocked_guardrails),
+                    "inference_time_ms": metadata.get("inference_time_ms", 0)
+                }
+                error_message = str(error_info)  # Convert to string like LiteLLM
+            else:
+                error_message = output_result.get("reason", "Response blocked by guardrails")
+
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": {
+                        "message": error_message,
+                        "type": "None",
+                        "param": "None",
+                        "code": "400"
+                    }
+                }
+            )
+
+        # Apply content modifications if any
+        if "content" in output_result:
+            full_response["choices"][0]["message"]["content"] = output_result["content"]
+
+        global_tracker.record(f"{provider}/{model_id}", resp.get("usage", {}), latency_ms)
+        return full_response
 
     @app.get("/v1/usage")
     async def usage():

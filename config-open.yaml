@@ -1,0 +1,21 @@
+# Open Relay config - no auth, no guardrails, just works!
+#
+# Perfect for local development, testing, or environments
+# where you don't need authentication or content filtering
+
+model_list:
+  # ── Local Models (no API keys needed) ─────────────────────────────────────
+  - model_name: llama3
+    litellm_params:
+      model: ollama/llama3.2
+
+  # ── Add your API-based models as needed ──────────────────────────────────
+  # - model_name: gpt-4o-mini
+  #   litellm_params:
+  #     model: openai/gpt-4o-mini
+  #     api_key: os.environ/OPENAI_API_KEY
+
+# ── Minimal Settings ──────────────────────────────────────────────────────
+general_settings:
+  # master_key: not-set  # no authentication required
+  request_timeout: 120

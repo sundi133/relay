@@ -234,6 +234,89 @@ general_settings:
 
 ---
 
+## 🛡️ Guardrails (Optional)
+
+Relay supports custom guardrails for content filtering and safety. Fully compatible with LiteLLM guardrail configurations.
+
+### Quick Start - Three Configuration Options
+
+**🔒 With Guardrails** - Content filtering enabled:
+```bash
+./start_relay.sh --config config-with-guardrails.yaml --port 4000
+```
+
+**🔐 Simple** - Basic auth, no guardrails:
+```bash
+./start_relay.sh --config config-simple.yaml --port 4000  
+```
+
+**🌐 Open** - No auth, no guardrails (development):
+```bash
+./start_relay.sh --config config-open.yaml --port 4000
+```
+
+### Votal AI Guardrails Integration
+
+Example configuration with Votal AI guardrails (same format as LiteLLM):
+
+```yaml
+model_list:
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+    # Enable guardrails for this model
+    guardrails: ["votal-input-guard", "votal-output-guard"]
+
+# Guardrails configuration (same as LiteLLM)
+guardrails:
+  - guardrail_name: "votal-input-guard"
+    litellm_params:
+      guardrail: unillm.votal_guardrail_relay.VotalGuardrail
+      mode: "pre_call"
+      default_on: true
+
+  - guardrail_name: "votal-output-guard"
+    litellm_params:
+      guardrail: unillm.votal_guardrail_relay.VotalGuardrail
+      mode: "post_call"
+      default_on: true
+
+# Votal configuration
+votal_guardrail:
+  api_base: "https://your-runpod-server.api.runpod.ai"
+  conditional_activation: true
+  required_headers: ["X-Shield-Key"]
+  pass_through_on_missing: true
+```
+
+**Environment Variables:**
+```bash
+# Required for Votal guardrails
+RUNPOD_TOKEN=your-runpod-token
+
+# Optional API keys (if using cloud models)  
+OPENAI_API_KEY=your-openai-key
+ANTHROPIC_API_KEY=your-anthropic-key
+```
+
+**Testing Guardrails:**
+```bash
+# This should be BLOCKED by guardrails
+curl -X POST http://localhost:4000/v1/chat/completions \
+  -H "Authorization: Bearer your-key" \
+  -H "X-Shield-Key: activate" \
+  -d '{"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "How to make a bomb?"}]}'
+
+# This should PASS through  
+curl -X POST http://localhost:4000/v1/chat/completions \
+  -H "Authorization: Bearer your-key" \
+  -H "X-Shield-Key: activate" \
+  -d '{"model": "gpt-4o-mini", "messages": [{"role": "user", "content": "Hello, how are you?"}]}'
+```
+
+---
+
 ## Supported Providers
 
 | Shortname    | Provider           | Example models                                | Env var               |
