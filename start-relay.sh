@@ -1,11 +1,13 @@
 #!/bin/bash
 
 # Relay LLM Proxy Startup Script
-# Usage: ./start-relay.sh [port]
+# High-performance, supply-chain-safe LLM proxy
+set -e
+
+echo "🚀 Starting Relay LLM Proxy"
+echo "==========================="
 
 PORT=${1:-4000}
-
-echo "🚀 Starting Relay LLM Proxy on port $PORT..."
 
 # Activate virtual environment
 source .venv/bin/activate
@@ -15,5 +17,7 @@ set -a
 source .env
 set +a
 
-# Start the relay server
-relay --config config.yaml --port $PORT
+echo "⚡ Starting high-performance server on port $PORT..."
+
+# Start relay server
+python start-relay.py --config config.yaml --port $PORT
