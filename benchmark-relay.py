@@ -191,12 +191,12 @@ async def main():
     try:
         # Run different test scenarios
         print(f"\n🎯 Test Scenario 1: Moderate Load")
-        result1 = await benchmark_relay(requests=50, concurrency=10)
+        result1 = await benchmark_relay(requests=200, concurrency=100)
         print_results(result1)
 
         print(f"\n{'='*60}")
         print(f"🔥 Test Scenario 2: High Load")
-        result2 = await benchmark_relay(requests=100, concurrency=20)
+        result2 = await benchmark_relay(requests=200, concurrency=100)
         print_results(result2)
 
         print(f"\n{'='*60}")
