@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "unillm"
+version = "0.1.0"
+description = "Minimal, secure, supply-chain-safe LLM router for any provider"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+
+# ── Intentionally minimal dependencies ──────────────────────────────────────
+# httpx is the ONLY runtime dependency.
+# No transitive CI/CD tooling. No unpinned build actions.
+dependencies = [
+    "httpx>=0.27.0,<1.0",   # pinned range; use requirements.lock for hash-pinning
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",          # mock httpx in tests
+]
+
+[project.urls]
+Repository = "https://github.com/yourorg/unillm"
+
+# ── Tool config ──────────────────────────────────────────────────────────────
+[tool.hatch.build.targets.wheel]
+packages = ["unillm"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+# ── Supply-chain hardening notes ─────────────────────────────────────────────
+#
+# 1. NEVER publish via a stored PyPI token.
+#    Use PyPI Trusted Publishers (OIDC) instead:
+#    https://docs.pypi.org/trusted-publishers/
+#
+# 2. Pin ALL GitHub Actions to a commit SHA, not a tag:
+#    ✅  uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+#    ❌  uses: actions/checkout@v4          ← tags are mutable
+#    ❌  uses: actions/checkout@main        ← branches are mutable
+#
+# 3. Generate a hash-pinned lockfile for your own users:
+#    pip-compile --generate-hashes requirements.in > requirements.lock
+#    # or with uv:
+#    uv pip compile requirements.in --generate-hashes > requirements.lock
+#
+# 4. Verify published packages with cosign after each release.
