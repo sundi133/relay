@@ -450,7 +450,7 @@ async def main():
     try:
         num_rounds = 5
         requests_per_round = 100
-        concurrency = 30
+        concurrency = 1
 
         print(f"\n{'='*70}")
         print(f"🧪 Test Configuration:")

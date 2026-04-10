@@ -12,13 +12,17 @@ from .config import RelayConfig, GuardrailEntry
 
 
 class RelayGuardrailManager(GuardrailManager):
-    """Enhanced guardrail manager for Relay with config loading"""
+    """Enhanced guardrail manager for Relay with config loading and performance optimization"""
 
     def __init__(self, config: RelayConfig):
         super().__init__()
         self.config = config
         self.guardrail_instances: Dict[str, BaseGuardrail] = {}
         self.model_guardrails: Dict[str, List[str]] = {}  # model_name -> guardrail_names
+
+        # Pre-computed model-specific managers for performance
+        self.model_input_managers: Dict[str, GuardrailManager] = {}
+        self.model_output_managers: Dict[str, GuardrailManager] = {}
 
     async def initialize(self):
         """Initialize all configured guardrails"""
@@ -40,12 +44,31 @@ class RelayGuardrailManager(GuardrailManager):
 
                 print(f"✅ Loaded guardrail: {guardrail_entry.guardrail_name} ({guardrail_entry.mode})")
 
-        # Build model -> guardrail mapping
+        # Build model -> guardrail mapping and pre-compute model-specific managers
         for model_entry in self.config.models:
             if model_entry.guardrails:
                 self.model_guardrails[model_entry.model_name] = model_entry.guardrails
 
+                # Pre-compute input manager for this model
+                input_manager = GuardrailManager()
+                output_manager = GuardrailManager()
+
+                for guardrail_name in model_entry.guardrails:
+                    if guardrail_name in self.guardrail_instances:
+                        guardrail = self.guardrail_instances[guardrail_name]
+                        guardrail_entry = self.config.guardrail_for(guardrail_name)
+
+                        if guardrail_entry:
+                            if guardrail_entry.mode in ["pre_call", "both"]:
+                                input_manager.add_input_guardrail(guardrail)
+                            if guardrail_entry.mode in ["post_call", "both"]:
+                                output_manager.add_output_guardrail(guardrail)
+
+                self.model_input_managers[model_entry.model_name] = input_manager
+                self.model_output_managers[model_entry.model_name] = output_manager
+
         print(f"🔒 Initialized {len(self.guardrail_instances)} guardrails")
+        print(f"⚡ Pre-computed managers for {len(self.model_input_managers)} models (zero per-request allocation)")
 
     async def _load_guardrail(self, entry: GuardrailEntry) -> Optional[BaseGuardrail]:
         """Load a guardrail class from its module path"""
@@ -103,37 +126,23 @@ class RelayGuardrailManager(GuardrailManager):
         full_response: Dict[str, Any] = None,
         mode: str = "input"
     ) -> Dict[str, Any]:
-        """Validate using only the guardrails configured for a specific model"""
+        """Validate using only the guardrails configured for a specific model (performance optimized)"""
 
-        model_guardrail_names = self.get_model_guardrails(model_name)
-        if not model_guardrail_names:
-            # No specific guardrails for this model, use all
-            if mode == "input" and messages is not None:
-                return await self.validate_input(context, messages)
-            elif mode == "output" and response_content is not None:
-                return await self.validate_output(context, response_content, full_response or {})
-            else:
-                return {"allowed": True}
-
-        # Create temporary manager with only model-specific guardrails
-        temp_manager = GuardrailManager()
-
-        for guardrail_name in model_guardrail_names:
-            if guardrail_name in self.guardrail_instances:
-                guardrail = self.guardrail_instances[guardrail_name]
-                guardrail_entry = self.config.guardrail_for(guardrail_name)
-
-                if guardrail_entry:
-                    if mode == "input" and guardrail_entry.mode in ["pre_call", "both"]:
-                        temp_manager.add_input_guardrail(guardrail)
-                    elif mode == "output" and guardrail_entry.mode in ["post_call", "both"]:
-                        temp_manager.add_output_guardrail(guardrail)
-
-        # Run validation with model-specific guardrails
+        # Fast path: Use pre-computed managers (zero allocation per request)
         if mode == "input" and messages is not None:
-            return await temp_manager.validate_input(context, messages)
+            if model_name in self.model_input_managers:
+                return await self.model_input_managers[model_name].validate_input(context, messages)
+            else:
+                # Fallback to global validation if no model-specific guardrails
+                return await self.validate_input(context, messages)
+
         elif mode == "output" and response_content is not None:
-            return await temp_manager.validate_output(context, response_content, full_response or {})
+            if model_name in self.model_output_managers:
+                return await self.model_output_managers[model_name].validate_output(context, response_content, full_response or {})
+            else:
+                # Fallback to global validation if no model-specific guardrails
+                return await self.validate_output(context, response_content, full_response or {})
+
         else:
             return {"allowed": True}
 

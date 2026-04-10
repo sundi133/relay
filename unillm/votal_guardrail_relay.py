@@ -183,6 +183,14 @@ class VotalGuardrail(BaseGuardrail):
             "agent_id": agent_id
         }
 
+    def _extract_user_message(self, messages: List[Dict[str, Any]]) -> str:
+        """Fast extraction of user message content for validation"""
+        # Find the last user message (most efficient for typical chat patterns)
+        for message in reversed(messages):
+            if message.get("role") == "user" and message.get("content"):
+                return str(message["content"])
+        return ""
+
     def _extract_user_message(self, messages: List[Dict[str, Any]]) -> Optional[str]:
         """Extract user message content from messages array"""
         for message in reversed(messages):
