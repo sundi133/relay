@@ -85,47 +85,14 @@ cp .env.example .env
 ## Quick Start
 
 ```bash
-# 🚀 Fastest way (uses defaults: port 4000, config.yaml)
-./start-relay.sh
-
-# 🔧 Custom port
-./start-relay.sh 8080
-
-# ⚙️  Advanced options (full control)
-python start-relay.py --config config.yaml --port 4000 --log-level info --host 0.0.0.0
+python3 start-relay.py --config config.yaml --port 4001
 ```
 
-### Why Two Startup Files?
-
-**`start-relay.sh`** - Quick launcher for common cases:
-- Automatically loads `.env` variables
-- Uses sensible defaults (config.yaml, port 4000)
-- Perfect for development and simple deployments
-
-**`start-relay.py`** - Full-featured server launcher:
-- Complete argument parsing with help text
-- Cross-platform compatibility (works on Windows)
-- Performance optimizations (uvloop, httptools)  
-- Error handling and graceful shutdown
-- Production-ready configuration options
-
-💡 **Use `start-relay.sh` for quick testing, `start-relay.py` for production deployments.**
-
-**Examples:**
-```bash
-# Development - quick start with defaults
-./start-relay.sh
-
-# Production - full control
-python start-relay.py \
-  --config production.yaml \
-  --port 8080 \
-  --host 0.0.0.0 \
-  --log-level warning
-
-# Docker/containers - specify all parameters
-python start-relay.py --config /etc/relay/config.yaml --port 4000
-```
+**That's it!** This starts the high-performance server with:
+- 🚀 **600 connection pool** for maximum throughput
+- ⚡ **uvloop + httptools** for speed  
+- 🔧 **Automatic .env loading** 
+- 📈 **~40-50 req/s performance**
 
 ```
 ██████████████████████████████████████████████████
@@ -148,14 +115,7 @@ python start-relay.py --config /etc/relay/config.yaml --port 4000
 ### Startup Options
 
 ```bash
-# Quick start on default port 4000
-./start-relay.sh
-
-# Custom port
-./start-relay.sh 8080
-
-# Direct Python execution with options
-python start-relay.py --config config.yaml --port 4000 --host 0.0.0.0 --log-level info
+python3 start-relay.py --config config.yaml --port 4001
 ```
 
 ---
@@ -241,17 +201,17 @@ Relay supports custom guardrails for content filtering and safety. Fully compati
 
 **🔒 With Guardrails** - Content filtering enabled:
 ```bash
-./start_relay.sh --config config-with-guardrails.yaml --port 4000
+python3 start-relay.py --config config-with-guardrails.yaml --port 4001
 ```
 
 **🔐 Simple** - Basic auth, no guardrails:
 ```bash
-./start_relay.sh --config config-simple.yaml --port 4000  
+python3 start-relay.py --config config-simple.yaml --port 4001
 ```
 
 **🌐 Open** - No auth, no guardrails (development):
 ```bash
-./start_relay.sh --config config-open.yaml --port 4000
+python3 start-relay.py --config config-open.yaml --port 4001
 ```
 
 ### Votal AI Guardrails Integration
