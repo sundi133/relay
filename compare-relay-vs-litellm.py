@@ -401,7 +401,7 @@ async def main():
 
     try:
         num_rounds = 5
-        requests_per_round = 500
+        requests_per_round = 1000
         concurrency = 40
 
         print(f"\n{'='*70}")
