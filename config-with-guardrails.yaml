@@ -55,6 +55,7 @@ guardrails:
 # Votal guardrail configuration (same as LiteLLM)
 votal_guardrail:
   api_base: "https://kk5losqxwr2ui7.api.runpod.ai"
+  api_token: "os.environ/RUNPOD_TOKEN"
   default_tenant_api_key: "basic-api-key-12345"
   default_user_role: "user"
   timeout: 30
@@ -66,5 +67,5 @@ votal_guardrail:
   pass_through_on_missing: true
 
 general_settings:
-  master_key: sk-relay-secret-change-me
   request_timeout: 120
+# master_key is read from RELAY_KEY environment variable

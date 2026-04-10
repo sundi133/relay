@@ -15,6 +15,7 @@ sys.path.insert(0, str(project_root))
 
 from unillm.config import load
 from unillm.server_fast import create_fast_app
+from unillm.server import create_app
 
 def main():
     parser = argparse.ArgumentParser(description="Relay LLM Proxy - High-Performance OpenAI-Compatible Gateway")
@@ -38,23 +39,38 @@ def main():
     # Load config
     config = load(args.config)
 
-    # Create ultra-fast app
-    app = create_fast_app(config)
+    # Auto-select server type based on configuration
+    if config.guardrails and len(config.guardrails) > 0:
+        print("🛡️ Guardrails detected - using guardrails-enabled server")
+        app = create_app(config)
+        server_type = "Guardrails-Enabled"
+    else:
+        print("🚀 No guardrails - using ultra-fast server")
+        app = create_fast_app(config)
+        server_type = "Ultra-Fast"
 
     print("\n" + "█" * 50)
-    print("  🚀 RELAY LLM PROXY")
+    print(f"  🚀 RELAY LLM PROXY ({server_type})")
     print("  High-Performance • Supply-Chain-Safe")
     print("█" * 50)
     print(f"  Config: {args.config}")
     print(f"  Models: {', '.join(config.model_names)}")
     print(f"  Auth: {'✓' if config.master_key else '✗'}")
+    print(f"  Guardrails: {'✓' if config.guardrails else '✗'}")
     print(f"  URL: http://{args.host}:{args.port}")
     print("")
-    print("  Performance Optimizations:")
-    print("  • HTTP/2 connection pooling")
-    print("  • Async I/O with uvloop")
+
+    if config.guardrails:
+        print("  🛡️ Security Features:")
+        print(f"     • {len(config.guardrails)} guardrail(s) configured")
+        print("     • Input/output content filtering")
+        print("     • Real-time threat detection")
+        print("")
+
+    print("  ⚡ Performance Features:")
+    print("  • Connection pooling (600 max connections)")
+    print("  • Async I/O with uvloop + httptools")
     print("  • Memory-efficient processing")
-    print("  • Supply-chain security")
     print("█" * 50)
 
     # Ultra-fast uvicorn configuration with performance optimizations
