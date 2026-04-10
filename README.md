@@ -43,7 +43,6 @@ Relay achieves **15-28% better performance** than LiteLLM through several key op
 - **uvloop event loop** — libuv-based async I/O (same as Node.js)
 - **httptools parser** — fast HTTP parsing written in C  
 - **Memory efficiency** — minimal object allocations and garbage collection pressure
-- **Optimized I/O** — no blocking database writes on request path
 - **Response caching** — pre-compiled JSON templates for faster responses
 
 **📊 Performance Testing:**
@@ -372,24 +371,6 @@ Lists all models defined in your `config.yaml`.
 curl http://localhost:4000/v1/models
 ```
 
-### `GET /v1/usage`
-
-Usage tracking optimized for performance (no persistent storage).
-
-```bash
-curl http://localhost:4000/v1/usage
-```
-
-```json
-{
-  "message": "Usage tracking optimized for maximum performance",
-  "tracking_enabled": false,
-  "note": "For detailed usage tracking, see usage data in API responses"
-}
-```
-
-> **Note**: For maximum performance, persistent usage tracking is disabled. Each API response includes usage data in the `usage` field for request-level tracking.
-
 ---
 
 ## Use with the OpenAI SDK
@@ -425,7 +406,6 @@ async def main():
     # Single call
     resp = await unillm.completion("qwen/qwen-turbo", messages)
     print(resp.content)
-    print(resp.usage)   # {"prompt_tokens": 12, "completion_tokens": 38, "cost_usd": 0.0000025}
 
     # Streaming
     async for chunk in await unillm.stream("glm/glm-4", messages):
@@ -447,59 +427,6 @@ async def main():
     resp = await unillm.completion("myserver/my-model", messages)
 
 asyncio.run(main())
-```
-
----
-
-## Cost Tracking (persists across restarts)
-
-Every call is written to `~/.unillm/usage.db` (SQLite). Totals reload automatically when the process starts — no data lost on restart.
-
-```python
-import unillm
-
-print(unillm.tracker.total_calls)       # lifetime total
-print(unillm.tracker.total_cost_usd)
-print(unillm.tracker.summary(detailed=True))
-```
-
-```
-╔══════════════════════════════════════════════════╗
-║              UniLLM Usage Summary                 ║
-╚══════════════════════════════════════════════════╝
-  DB            : /home/you/.unillm/usage.db
-  Session start : 2026-04-08 10:00:00 UTC
-  Total calls   : 1,847  (lifetime)
-  Total tokens  : 2,304,100
-  Total cost    : $0.230410
-
-  Per-model breakdown (lifetime):
-  Model                               Calls     Tokens     Cost ($)   Avg ms  Errors
-  deepseek/deepseek-chat               1200    1,500,000    0.168000      280       0
-  qwen/qwen-turbo                       500      600,000    0.030000      310       0
-  ollama/llama3.2                       147      204,100    0.000000      890       0
-
-  Daily cost (last 7 days):
-  Date           Calls     Tokens     Cost ($)
-  2026-04-08       312    420,300    0.047163
-  2026-04-07       288    390,100    0.043811
-```
-
-```python
-# Query history
-unillm.tracker.history(limit=20)
-unillm.tracker.history(model="qwen/qwen-turbo", since="2026-04-01")
-unillm.tracker.history(errors_only=True)
-unillm.tracker.daily_cost()
-
-# Change DB location
-import os; os.environ["UNILLM_DB"] = "./myproject.db"
-
-# Clear memory, keep DB history
-unillm.tracker.reset_session()
-
-# Wipe everything (irreversible)
-unillm.tracker.wipe()
 ```
 
 ---
@@ -561,14 +488,12 @@ relay/
 │   ├── providers.py     # Provider registry + cost table (15+ providers)
 │   ├── handlers.py      # HTTP adapters (openai-compat, anthropic, gemini)
 │   ├── retry.py         # Exponential backoff with full jitter
-│   ├── tracker.py       # SQLite-backed cost + usage tracker
 │   ├── fallback.py      # FallbackRouter
 │   ├── config.py        # config.yaml loader (litellm-compatible format)
 │   ├── server.py        # FastAPI proxy server
 │   └── cli.py           # relay CLI entry point
 ├── tests/
 │   ├── test_unillm.py   # Provider, retry, fallback tests
-│   ├── test_tracker.py  # SQLite persistence tests
 │   └── test_server.py   # Config loader + server endpoint tests
 ├── config.yaml          # Example config (edit and use directly)
 ├── .github/

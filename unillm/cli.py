@@ -110,13 +110,11 @@ def main() -> None:
     print(f"  Models      : {', '.join(config.model_names) or '(none)'}")
     print(f"  Auth        : {'master_key set ✓' if config.master_key else 'open (no master_key)'}")
     print(f"  Listening   : http://{args.host}:{args.port}")
-    print(f"  Usage DB    : ~/.unillm/usage.db")
     print()
     print(f"  Endpoints:")
     print(f"    GET  /health")
     print(f"    GET  /v1/models")
     print(f"    POST /v1/chat/completions")
-    print(f"    GET  /v1/usage")
     print()
 
     # ── Register api_key overrides into provider registry ────────────────────

@@ -8,15 +8,12 @@ Quick start:
         {"role": "user", "content": "Hello!"}
     ])
     print(resp.content)
-    print(unillm.tracker.summary(detailed=True))
 """
 from __future__ import annotations
-import time
 from typing import AsyncIterator
 
 from .handlers import call
 from .retry import with_retry
-from .tracker import tracker
 from .fallback import FallbackRouter
 from .providers import (
     register as register_provider,
@@ -31,7 +28,6 @@ __all__ = [
     "register_provider",
     "list_providers",
     "FallbackRouter",
-    "tracker",
 ]
 
 
@@ -70,7 +66,6 @@ async def completion(
         await unillm.completion("vllm/Qwen2.5-72B-Instruct", messages)
     """
     provider, model_id = _parse_model(model)
-    t0 = time.monotonic()
 
     async def _call():
         return await call(provider, model_id, messages,
@@ -80,8 +75,6 @@ async def completion(
                           **kwargs)
 
     resp = await with_retry(_call, max_attempts=max_attempts)
-    latency_ms = (time.monotonic() - t0) * 1000
-    tracker.record(model, resp.get("usage", {}), latency_ms)
     return resp
 
 

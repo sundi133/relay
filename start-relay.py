@@ -57,19 +57,39 @@ def main():
     print("  • Supply-chain security")
     print("█" * 50)
 
-    # Ultra-fast uvicorn configuration
+    # Ultra-fast uvicorn configuration with performance optimizations
+    uvicorn_kwargs = {
+        "app": app,
+        "host": args.host,
+        "port": args.port,
+        "log_level": args.log_level,
+        "access_log": False,         # Disable access logging
+        "server_header": False,      # Remove server header
+        "date_header": False,        # Remove date header
+        # Performance optimizations
+        "backlog": 2048,             # Higher connection backlog
+        "limit_concurrency": 1000,   # Higher concurrent request limit
+        "limit_max_requests": None,  # No request limit per worker
+        "timeout_keep_alive": 65,    # Longer keepalive timeout
+    }
+
+    # Add performance optimizations if available
     try:
-        uvicorn.run(
-            app,
-            host=args.host,
-            port=args.port,
-            log_level=args.log_level,
-            access_log=False,       # Disable access logging
-            server_header=False,    # Remove server header
-            date_header=False,      # Remove date header
-            loop="uvloop",          # High-performance event loop
-            http="httptools",       # Fast HTTP parser
-        )
+        import uvloop
+        uvicorn_kwargs["loop"] = "uvloop"
+        print("  • uvloop: ✓")
+    except ImportError:
+        print("  • uvloop: ✗ (using asyncio)")
+
+    try:
+        import httptools
+        uvicorn_kwargs["http"] = "httptools"
+        print("  • httptools: ✓")
+    except ImportError:
+        print("  • httptools: ✗ (using h11)")
+
+    try:
+        uvicorn.run(**uvicorn_kwargs)
     except KeyboardInterrupt:
         print("\n⏹️  Server stopped")
     except Exception as e:

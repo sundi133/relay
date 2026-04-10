@@ -9,7 +9,6 @@ import json
 
 import unillm
 from unillm.fallback import FallbackRouter
-from unillm.tracker import UsageTracker
 from unillm.retry import with_retry
 
 
@@ -187,8 +186,6 @@ async def test_fallback_uses_second_on_failure():
     assert resp["_used_model"] == "qwen/qwen-turbo"
     assert "千问" in resp.content
 
-
-# ── Cost tracker ──────────────────────────────────────────────────────────────
 
 # ── Custom provider registration ──────────────────────────────────────────────
 

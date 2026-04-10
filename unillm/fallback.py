@@ -28,7 +28,6 @@ import httpx
 
 from .handlers import call
 from .retry import with_retry
-from .tracker import tracker
 
 log = logging.getLogger("unillm.fallback")
 
@@ -66,8 +65,6 @@ class FallbackRouter:
         Try each model in order, returning the first successful response.
         Attaches `._used_model` to the response so callers know which won.
         """
-        import time
-
         last_exc: Exception | None = None
 
         for model_str in self.models:
@@ -85,15 +82,10 @@ class FallbackRouter:
             t0 = time.monotonic()
             try:
                 resp = await with_retry(_attempt, max_attempts=self.max_attempts)
-                latency_ms = (time.monotonic() - t0) * 1000
-                if hasattr(resp, "usage"):
-                    tracker.record(f"{provider}/{model_id}", resp.usage, latency_ms)
                 resp["_used_model"] = model_str
                 return resp
 
             except Exception as exc:
-                latency_ms = (time.monotonic() - t0) * 1000
-                tracker.record(f"{provider}/{model_id}", {}, latency_ms, error=True)
                 last_exc = exc
                 log.warning(
                     "unillm fallback: '%s' failed (%s: %s). Trying next model…",

@@ -24,6 +24,11 @@ dev = [
     "respx>=0.21",
     "httpx[socks]",
 ]
+performance = [
+    "httptools>=0.6.0",      # Fast HTTP parsing
+    "uvloop>=0.19.0",        # High-performance event loop (Unix only)
+    "httpx[http2]>=0.27.0",  # HTTP/2 support for connection pooling
+]
 
 [project.scripts]
 relay = "unillm.cli:main"

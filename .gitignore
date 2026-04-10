@@ -4,8 +4,6 @@ __pycache__/
 .pytest_cache/
 
 # Data
-*.db
-*.sqlite
 
 # Environment variables (contains sensitive API keys)
 .env

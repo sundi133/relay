@@ -8,6 +8,7 @@ to provide a fair, apples-to-apples performance comparison.
 import asyncio
 import time
 import statistics
+import math
 import httpx
 from typing import Dict, List
 
@@ -122,14 +123,44 @@ async def benchmark_server(config: ServerConfig, requests: int, concurrency: int
         "errors": errors[:3]
     }
 
-def print_comparison(relay_result: Dict, litellm_result: Dict):
-    """Print detailed head-to-head comparison"""
+def aggregate_results(all_results: List[Dict]) -> Dict:
+    """Aggregate results from multiple rounds into a single result with stddev."""
+    agg = {}
+    agg["name"] = all_results[0]["name"]
+    agg["rounds"] = len(all_results)
+
+    for k in ["success_count", "error_count"]:
+        agg[k] = sum(r[k] for r in all_results)
+
+    avg_keys = [
+        "requests_per_second", "avg_latency", "min_latency", "max_latency",
+        "p50_latency", "p95_latency", "p99_latency", "avg_response_size",
+    ]
+    for k in avg_keys:
+        values = [r[k] for r in all_results]
+        agg[k] = statistics.mean(values)
+        agg[f"{k}_stddev"] = statistics.stdev(values) if len(values) > 1 else 0.0
+
+    agg["total_time"] = sum(r["total_time"] for r in all_results)
+    agg["errors"] = []
+    for r in all_results:
+        agg["errors"].extend(r.get("errors", []))
+    agg["errors"] = agg["errors"][:5]
+    return agg
+
+
+def print_comparison(relay_result: Dict, litellm_result: Dict, num_rounds: int):
+    """Print detailed head-to-head comparison from aggregated multi-round results."""
     print(f"\n{'='*80}")
     print("🏆 RELAY vs LITELLM - HEAD-TO-HEAD PERFORMANCE COMPARISON")
+    print(f"   Aggregated over {num_rounds} rounds — values are means ± stddev")
     print("="*80)
 
     def ms(seconds):
         return f"{seconds * 1000:.1f}ms"
+
+    def ms_sd(seconds, sd):
+        return f"{seconds * 1000:.1f}ms ± {sd * 1000:.0f}ms"
 
     def pct_diff(a, b):
         if b == 0:
@@ -168,9 +199,9 @@ def print_comparison(relay_result: Dict, litellm_result: Dict):
     litellm_rps = litellm_result["requests_per_second"]
     rps_diff = pct_diff(relay_rps, litellm_rps)
 
-    print(f"\n⚡ 2. THROUGHPUT")
-    print(f"     Relay:    {relay_rps:>6.1f} req/s")
-    print(f"     LiteLLM:  {litellm_rps:>6.1f} req/s")
+    print(f"\n⚡ 2. THROUGHPUT (mean ± stddev across rounds)")
+    print(f"     Relay:    {relay_rps:>6.1f} req/s  ± {relay_result.get('requests_per_second_stddev', 0):.1f}")
+    print(f"     LiteLLM:  {litellm_rps:>6.1f} req/s  ± {litellm_result.get('requests_per_second_stddev', 0):.1f}")
     print(f"     Difference: {rps_diff:+.1f}% (Relay vs LiteLLM)")
 
     if relay_rps > litellm_rps:
@@ -195,8 +226,8 @@ def print_comparison(relay_result: Dict, litellm_result: Dict):
         avg_diff_pct = pct_diff(relay_avg, litellm_avg)
 
         print(f"\n🕐 3. AVERAGE LATENCY (lower is better)")
-        print(f"     Relay:    {ms(relay_avg):>9}")
-        print(f"     LiteLLM:  {ms(litellm_avg):>9}")
+        print(f"     Relay:    {ms_sd(relay_avg, relay_result.get('avg_latency_stddev', 0)):>20}")
+        print(f"     LiteLLM:  {ms_sd(litellm_avg, litellm_result.get('avg_latency_stddev', 0)):>20}")
         print(f"     Difference: {avg_diff_ms:+.1f}ms ({avg_diff_pct:+.1f}%)")
 
         if relay_avg < litellm_avg:
@@ -221,8 +252,8 @@ def print_comparison(relay_result: Dict, litellm_result: Dict):
         p95_diff_pct = pct_diff(relay_p95, litellm_p95)
 
         print(f"\n📉 4. P95 TAIL LATENCY (lower is better — production critical)")
-        print(f"     Relay:    {ms(relay_p95):>9}")
-        print(f"     LiteLLM:  {ms(litellm_p95):>9}")
+        print(f"     Relay:    {ms_sd(relay_p95, relay_result.get('p95_latency_stddev', 0)):>20}")
+        print(f"     LiteLLM:  {ms_sd(litellm_p95, litellm_result.get('p95_latency_stddev', 0)):>20}")
         print(f"     Difference: {p95_diff_ms:+.1f}ms ({p95_diff_pct:+.1f}%)")
 
         if relay_p95 < litellm_p95:
@@ -300,7 +331,7 @@ def print_comparison(relay_result: Dict, litellm_result: Dict):
             print(f"   Mixed results — both servers have different strengths.")
 
     # ── Scorecard & Final Verdict ───────────────────────────────────────────
-    print(f"\n🎯 FINAL VERDICT")
+    print(f"\n🎯 FINAL VERDICT  ({num_rounds} rounds aggregated)")
     print("="*60)
 
     print(f"\n   {'Category':<18} {'Winner':<10} {'Margin':<18}")
@@ -330,7 +361,7 @@ async def main():
     # Server configurations - IDENTICAL MODEL NAMES for fair comparison
     relay_config = ServerConfig(
         name="Relay (Optimized)",
-        url="http://localhost:7001",
+        url="http://localhost:4001",
         endpoint="/v1/chat/completions",
         model="gpt-4.1-mini",  # Same model name for both servers
         auth="Bearer sk-relay-secure-key-from-env-12345"
@@ -352,11 +383,11 @@ async def main():
     # Check server availability
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            relay_health = await client.get("http://localhost:7001/health")
+            relay_health = await client.get("http://localhost:4001/health")
             litellm_health = await client.get("http://localhost:4000/health")
 
         if relay_health.status_code != 200:
-            print("❌ Relay server not available on port 7001")
+            print("❌ Relay server not available on port 4001")
             return
         if litellm_health.status_code != 200:
             print("❌ LiteLLM server not available on port 4000")
@@ -369,19 +400,34 @@ async def main():
         return
 
     try:
-        # Test scenarios with high concurrency
-        scenario = {"name": "High Load", "requests": 100, "concurrency": 40}
+        num_rounds = 5
+        requests_per_round = 500
+        concurrency = 40
 
         print(f"\n{'='*70}")
-        print(f"🎯 Test Scenario: {scenario['name']}")
-        print(f"   Requests: {scenario['requests']}, Concurrency: {scenario['concurrency']}")
+        print(f"🎯 Test: High Load × {num_rounds} rounds")
+        print(f"   {requests_per_round} requests/round, concurrency {concurrency}")
+        print(f"   Total: {requests_per_round * num_rounds} requests per server")
         print("="*70)
 
-        # Run benchmarks sequentially to avoid interference
-        relay_result = await benchmark_server(relay_config, scenario["requests"], scenario["concurrency"])
-        litellm_result = await benchmark_server(litellm_config, scenario["requests"], scenario["concurrency"])
+        relay_results = []
+        litellm_results = []
 
-        print_comparison(relay_result, litellm_result)
+        for i in range(num_rounds):
+            print(f"\n{'─'*50}")
+            print(f"   ROUND {i + 1} of {num_rounds}")
+            print(f"{'─'*50}")
+
+            relay_result = await benchmark_server(relay_config, requests_per_round, concurrency)
+            litellm_result = await benchmark_server(litellm_config, requests_per_round, concurrency)
+
+            relay_results.append(relay_result)
+            litellm_results.append(litellm_result)
+
+        relay_agg = aggregate_results(relay_results)
+        litellm_agg = aggregate_results(litellm_results)
+
+        print_comparison(relay_agg, litellm_agg, num_rounds)
 
     except KeyboardInterrupt:
         print("\n⏹️  Benchmark cancelled by user")

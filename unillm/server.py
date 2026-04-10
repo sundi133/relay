@@ -27,7 +27,6 @@ from pydantic import BaseModel
 from .config import RelayConfig, ModelEntry
 from .handlers import call
 from .retry import with_retry
-from .tracker import tracker as global_tracker
 from . import providers as _providers
 from .guardrails_manager import RelayGuardrailManager
 from .guardrails_base import GuardrailContext
@@ -335,29 +334,7 @@ def create_app(config: RelayConfig) -> FastAPI:
         if "content" in output_result:
             full_response["choices"][0]["message"]["content"] = output_result["content"]
 
-        global_tracker.record(f"{provider}/{model_id}", resp.get("usage", {}), latency_ms)
         return full_response
-
-    @app.get("/v1/usage")
-    async def usage():
-        """Relay extension: live cost + usage stats."""
-        per_model = {
-            name: {
-                "calls": s.calls,
-                "total_tokens": s.total_tokens,
-                "cost_usd": round(s.cost_usd, 8),
-                "errors": s.errors,
-                "avg_latency_ms": round(s.avg_latency_ms, 1),
-            }
-            for name, s in global_tracker.per_model().items()
-        }
-        return {
-            "total_calls": global_tracker.total_calls,
-            "total_tokens": global_tracker.total_tokens,
-            "total_cost_usd": round(global_tracker.total_cost_usd, 8),
-            "db_path": str(global_tracker.db_path),
-            "per_model": per_model,
-        }
 
     return app
 
