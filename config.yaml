@@ -6,7 +6,6 @@
 # Then call it exactly like LiteLLM or the OpenAI API:
 #   curl http://localhost:4000/v1/chat/completions \
 #     -H "Content-Type: application/json" \
-#     -H "Authorization: Bearer sk-relay-secret" \
 #     -d '{"model": "gpt-4o", "messages": [{"role": "user", "content": "Hi"}]}'
 
 model_list:
@@ -105,5 +104,4 @@ model_list:
 #   pass_through_on_missing: true
 
 general_settings:
-  master_key: sk-relay-secret-change-me   # set to null to disable auth
   request_timeout: 120

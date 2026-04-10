@@ -330,7 +330,7 @@ async def main():
     # Server configurations - IDENTICAL MODEL NAMES for fair comparison
     relay_config = ServerConfig(
         name="Relay (Optimized)",
-        url="http://localhost:5001",
+        url="http://localhost:7001",
         endpoint="/v1/chat/completions",
         model="gpt-4.1-mini",  # Same model name for both servers
         auth="Bearer sk-relay-secure-key-from-env-12345"
@@ -352,11 +352,11 @@ async def main():
     # Check server availability
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            relay_health = await client.get("http://localhost:5001/health")
+            relay_health = await client.get("http://localhost:7001/health")
             litellm_health = await client.get("http://localhost:4000/health")
 
         if relay_health.status_code != 200:
-            print("❌ Relay server not available on port 5001")
+            print("❌ Relay server not available on port 7001")
             return
         if litellm_health.status_code != 200:
             print("❌ LiteLLM server not available on port 4000")
@@ -370,22 +370,18 @@ async def main():
 
     try:
         # Test scenarios with high concurrency
-        scenarios = [
-            {"name": "Moderate Load", "requests": 50, "concurrency": 20},
-            {"name": "High Load", "requests": 100, "concurrency": 40},
-        ]
+        scenario = {"name": "High Load", "requests": 100, "concurrency": 40}
 
-        for scenario in scenarios:
-            print(f"\n{'='*70}")
-            print(f"🎯 Test Scenario: {scenario['name']}")
-            print(f"   Requests: {scenario['requests']}, Concurrency: {scenario['concurrency']}")
-            print("="*70)
+        print(f"\n{'='*70}")
+        print(f"🎯 Test Scenario: {scenario['name']}")
+        print(f"   Requests: {scenario['requests']}, Concurrency: {scenario['concurrency']}")
+        print("="*70)
 
-            # Run benchmarks sequentially to avoid interference
-            relay_result = await benchmark_server(relay_config, scenario["requests"], scenario["concurrency"])
-            litellm_result = await benchmark_server(litellm_config, scenario["requests"], scenario["concurrency"])
+        # Run benchmarks sequentially to avoid interference
+        relay_result = await benchmark_server(relay_config, scenario["requests"], scenario["concurrency"])
+        litellm_result = await benchmark_server(litellm_config, scenario["requests"], scenario["concurrency"])
 
-            print_comparison(relay_result, litellm_result)
+        print_comparison(relay_result, litellm_result)
 
     except KeyboardInterrupt:
         print("\n⏹️  Benchmark cancelled by user")

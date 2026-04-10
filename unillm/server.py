@@ -60,18 +60,23 @@ def create_app(config: RelayConfig) -> FastAPI:
         version="0.1.0",
     )
 
-    # Initialize guardrails manager
-    guardrails_manager = RelayGuardrailManager(config)
-    app.state.guardrails_manager = guardrails_manager
+    # Initialize guardrails manager (only if guardrails are configured)
+    if config.guardrails:
+        guardrails_manager = RelayGuardrailManager(config)
+        app.state.guardrails_manager = guardrails_manager
 
-    # Initialize guardrails on startup
-    @app.on_event("startup")
-    async def startup_event():
-        await guardrails_manager.initialize()
+        # Initialize guardrails on startup
+        @app.on_event("startup")
+        async def startup_event():
+            await guardrails_manager.initialize()
 
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        await guardrails_manager.shutdown()
+        @app.on_event("shutdown")
+        async def shutdown_event():
+            await guardrails_manager.shutdown()
+    else:
+        # No guardrails configured - use null manager for maximum performance
+        app.state.guardrails_manager = None
+        print("🚀 No guardrails configured - maximum performance mode")
 
     # ── Auth middleware ──────────────────────────────────────────────────────
     @app.middleware("http")
@@ -143,22 +148,21 @@ def create_app(config: RelayConfig) -> FastAPI:
     @app.post("/v1/chat/completions")
     async def chat_completions(req: ChatCompletionRequest, request: Request):
         provider, model_id, _ = resolve(req.model)
-        messages = [m.model_dump() for m in req.messages]
         t0 = time.monotonic()
 
-        # Create guardrail context
-        context = GuardrailContext(
-            headers=dict(request.headers),
-            model=req.model,
-            messages=messages,
-            metadata={}
-        )
-
-        # Input validation with guardrails
+        # Input validation with guardrails (performance optimized)
         guardrails_manager = app.state.guardrails_manager
 
-        # Skip guardrail processing if no guardrails are configured (performance optimization)
-        if guardrails_manager.has_guardrails_for_model(req.model):
+        # Skip all guardrail processing if no guardrails manager or no guardrails for this model
+        if guardrails_manager and guardrails_manager.has_guardrails_for_model(req.model):
+            # Only create expensive objects when guardrails are actually needed
+            messages = [m.model_dump() for m in req.messages]
+            context = GuardrailContext(
+                headers=dict(request.headers),
+                model=req.model,
+                messages=messages,
+                metadata={}
+            )
             input_result = await guardrails_manager.validate_for_model(
                 model_name=req.model,
                 context=context,
@@ -198,8 +202,14 @@ def create_app(config: RelayConfig) -> FastAPI:
                 }
             )
 
-        # Use modified messages if available
-        validated_messages = input_result.get("messages", messages)
+        # Use modified messages if available, otherwise serialize on-demand
+        if "messages" in input_result:
+            validated_messages = input_result["messages"]
+        elif guardrails_manager and guardrails_manager.has_guardrails_for_model(req.model):
+            validated_messages = messages  # Already serialized for guardrails
+        else:
+            # Fast path: serialize only when needed for provider call
+            validated_messages = [m.model_dump() for m in req.messages]
 
         async def _call():
             return await call(
@@ -219,7 +229,7 @@ def create_app(config: RelayConfig) -> FastAPI:
                     accumulated_content += chunk
 
                     # Validate streaming chunk (performance optimized)
-                    if guardrails_manager.has_guardrails_for_model(req.model):
+                    if guardrails_manager and guardrails_manager.has_guardrails_for_model(req.model):
                         chunk_result = await guardrails_manager.validate_for_model(
                             model_name=req.model,
                             context=context,
@@ -281,7 +291,7 @@ def create_app(config: RelayConfig) -> FastAPI:
         }
 
         # Output validation with guardrails (performance optimized)
-        if guardrails_manager.has_guardrails_for_model(req.model):
+        if guardrails_manager and guardrails_manager.has_guardrails_for_model(req.model):
             output_result = await guardrails_manager.validate_for_model(
                 model_name=req.model,
                 context=context,

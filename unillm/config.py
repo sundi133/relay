@@ -55,19 +55,18 @@ class RelayConfig:
     guardrails: list[GuardrailEntry] = field(default_factory=list)
     guardrails_config: Dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self):
+        """Build lookup caches for performance (O(1) instead of O(n))"""
+        self._model_cache = {m.model_name: m for m in self.models}
+        self._guardrail_cache = {g.guardrail_name: g for g in self.guardrails}
+
     def model_for(self, name: str) -> Optional[ModelEntry]:
-        """Look up a ModelEntry by its public alias."""
-        for m in self.models:
-            if m.model_name == name:
-                return m
-        return None
+        """Look up a ModelEntry by its public alias (cached O(1) lookup)."""
+        return self._model_cache.get(name)
 
     def guardrail_for(self, name: str) -> Optional[GuardrailEntry]:
-        """Look up a GuardrailEntry by its name."""
-        for g in self.guardrails:
-            if g.guardrail_name == name:
-                return g
-        return None
+        """Look up a GuardrailEntry by its name (cached O(1) lookup)."""
+        return self._guardrail_cache.get(name)
 
     @property
     def model_names(self) -> list[str]:
