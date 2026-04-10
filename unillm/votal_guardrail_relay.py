@@ -65,9 +65,16 @@ class VotalGuardrail(BaseGuardrail):
         else:
             self.votal_config = config
 
-        # Ensure api_token is loaded from environment if not provided
-        if not self.votal_config.api_token:
-            runpod_token = os.getenv("RUNPOD_TOKEN")
+        # Ensure api_token is loaded from environment if not provided or is env reference
+        if not self.votal_config.api_token or self.votal_config.api_token.startswith("os.environ/"):
+            if self.votal_config.api_token and self.votal_config.api_token.startswith("os.environ/"):
+                # Handle "os.environ/RUNPOD_TOKEN" format
+                env_var = self.votal_config.api_token.split("/", 1)[1]
+                runpod_token = os.getenv(env_var)
+            else:
+                # Default to RUNPOD_TOKEN
+                runpod_token = os.getenv("RUNPOD_TOKEN")
+
             if not runpod_token:
                 raise ValueError("RUNPOD_TOKEN not found in environment")
             self.votal_config.api_token = runpod_token
@@ -76,8 +83,6 @@ class VotalGuardrail(BaseGuardrail):
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(self.votal_config.timeout),
             headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.votal_config.api_token}",
                 "User-Agent": "Relay-Votal-Guardrails/2.0"
             }
         )
@@ -153,6 +158,7 @@ class VotalGuardrail(BaseGuardrail):
 
         tenant_api_key = (
             context.headers.get("X-API-Key") or
+            context.headers.get("X-Shield-Key") or
             context.headers.get("X-Tenant-ID") or
             context.headers.get("X-Votal-Key") or
             context.metadata.get("tenant_api_key") or
@@ -202,8 +208,10 @@ class VotalGuardrail(BaseGuardrail):
 
         payload = {"message": message}
         headers = {
+            "Authorization": f"Bearer {self.votal_config.api_token}",
             "X-API-Key": tenant_api_key,
             "X-User-Role": user_role,
+            "Content-Type": "application/json"
         }
 
         if agent_id:
@@ -260,8 +268,10 @@ class VotalGuardrail(BaseGuardrail):
             }
 
         headers = {
+            "Authorization": f"Bearer {self.votal_config.api_token}",
             "X-API-Key": tenant_api_key,
             "X-User-Role": user_role,
+            "Content-Type": "application/json"
         }
 
         if agent_id:
