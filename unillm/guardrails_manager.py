@@ -82,6 +82,18 @@ class RelayGuardrailManager(GuardrailManager):
         """Get guardrail names configured for a specific model"""
         return self.model_guardrails.get(model_name, [])
 
+    def has_guardrails_for_model(self, model_name: str) -> bool:
+        """Check if any guardrails are configured for a model (including global ones)"""
+        # Model-specific guardrails
+        if self.model_guardrails.get(model_name):
+            return True
+
+        # Global guardrails (when no model-specific ones exist)
+        if not self.model_guardrails.get(model_name) and (self.input_guardrails or self.output_guardrails):
+            return True
+
+        return False
+
     async def validate_for_model(
         self,
         model_name: str,

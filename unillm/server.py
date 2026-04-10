@@ -156,12 +156,17 @@ def create_app(config: RelayConfig) -> FastAPI:
 
         # Input validation with guardrails
         guardrails_manager = app.state.guardrails_manager
-        input_result = await guardrails_manager.validate_for_model(
-            model_name=req.model,
-            context=context,
-            messages=messages,
-            mode="input"
-        )
+
+        # Skip guardrail processing if no guardrails are configured (performance optimization)
+        if guardrails_manager.has_guardrails_for_model(req.model):
+            input_result = await guardrails_manager.validate_for_model(
+                model_name=req.model,
+                context=context,
+                messages=messages,
+                mode="input"
+            )
+        else:
+            input_result = {"allowed": True}  # Fast path when no guardrails
 
         if not input_result.get("allowed", True):
             # Format response to match LiteLLM exactly
@@ -213,14 +218,17 @@ def create_app(config: RelayConfig) -> FastAPI:
                 async for chunk in gen:
                     accumulated_content += chunk
 
-                    # Validate streaming chunk
-                    chunk_result = await guardrails_manager.validate_for_model(
-                        model_name=req.model,
-                        context=context,
-                        response_content=accumulated_content,
-                        full_response={"choices": [{"message": {"content": accumulated_content}}]},
-                        mode="output"
-                    )
+                    # Validate streaming chunk (performance optimized)
+                    if guardrails_manager.has_guardrails_for_model(req.model):
+                        chunk_result = await guardrails_manager.validate_for_model(
+                            model_name=req.model,
+                            context=context,
+                            response_content=accumulated_content,
+                            full_response={"choices": [{"message": {"content": accumulated_content}}]},
+                            mode="output"
+                        )
+                    else:
+                        chunk_result = {"allowed": True}  # Fast path when no guardrails
 
                     if not chunk_result.get("allowed", True):
                         # Stream was blocked - send error and stop
@@ -272,13 +280,17 @@ def create_app(config: RelayConfig) -> FastAPI:
             "relay": {"target": f"{provider}/{model_id}"},
         }
 
-        output_result = await guardrails_manager.validate_for_model(
-            model_name=req.model,
-            context=context,
-            response_content=resp["content"],
-            full_response=full_response,
-            mode="output"
-        )
+        # Output validation with guardrails (performance optimized)
+        if guardrails_manager.has_guardrails_for_model(req.model):
+            output_result = await guardrails_manager.validate_for_model(
+                model_name=req.model,
+                context=context,
+                response_content=resp["content"],
+                full_response=full_response,
+                mode="output"
+            )
+        else:
+            output_result = {"allowed": True}  # Fast path when no guardrails
 
         if not output_result.get("allowed", True):
             # Format response to match LiteLLM exactly
